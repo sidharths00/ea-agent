@@ -31,7 +31,7 @@ const TOOLS: Tool[] = [
         key: {
           type: "string",
           description:
-            "Preference key. One of: workingHoursStart, workingHoursEnd, timezone, defaultMeetingDurationMinutes, bufferBeforeMinutes, bufferAfterMinutes, preferredPlatform, maxMeetingsPerDay, noMeetingDays.",
+            "Preference key. One of: workingHoursStart, workingHoursEnd, timezone, defaultMeetingDurationMinutes, bufferBeforeMinutes, bufferAfterMinutes, preferredPlatform, maxMeetingsPerDay, noMeetingDays, customRules. Use customRules to store freeform owner instructions (e.g. 'dinner means 6pm PT'). When appending to customRules, read existing value first and include all prior rules plus the new one.",
         },
         value: { type: "string", description: "New value for the preference." },
       },
@@ -317,7 +317,9 @@ IMPORTANT RULES:
 - When replying, keep the subject line starting with "Re:" to stay in the thread.
 - Only call book_meeting when the requester has explicitly confirmed a specific time.
 - If the thread is already in state "booked", send a polite note that the meeting is already scheduled.
-- If the owner emails asking about their own availability, reply with a clear summary of their free slots for the requested period.`;
+- If the owner emails asking about their own availability, reply with a clear summary of their free slots for the requested period.
+- If the owner says "remember X" or "always do Y", call set_preference with key="customRules" to persist it. Read existing customRules first and write back all prior rules plus the new one (one rule per line). Then apply the rule immediately in this same response.
+- Always read customRules from get_preferences at the start and follow any rules stored there.`;
 }
 
 // ── Main agent loop ────────────────────────────────────────────────────────────

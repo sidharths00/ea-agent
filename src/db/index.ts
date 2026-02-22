@@ -57,6 +57,7 @@ const DEFAULT_PREFERENCES: Record<string, string> = {
   preferredPlatform: "Google Meet",
   maxMeetingsPerDay: "6",
   noMeetingDays: JSON.stringify([0, 6]), // Sun, Sat
+  customRules: "",
 };
 
 function seedDefaultPreferences(db: Database.Database): void {
@@ -87,6 +88,7 @@ export function getPreferences(): Preferences {
     preferredPlatform: map.preferredPlatform ?? "Google Meet",
     maxMeetingsPerDay: Number(map.maxMeetingsPerDay ?? 6),
     noMeetingDays: JSON.parse(map.noMeetingDays ?? "[0,6]"),
+    customRules: map.customRules ?? "",
   };
 }
 

@@ -16,6 +16,7 @@ export function toolSetPreference(key: string, value: string): { success: boolea
     "preferredPlatform",
     "maxMeetingsPerDay",
     "noMeetingDays",
+    "customRules",
   ];
 
   if (!validKeys.includes(key as keyof Preferences)) {

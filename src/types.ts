@@ -57,6 +57,7 @@ export interface Preferences {
   preferredPlatform: string;    // "Google Meet" | "Zoom" | "phone" etc.
   maxMeetingsPerDay: number;
   noMeetingDays: number[];      // 0=Sun, 1=Mon, ... 6=Sat
+  customRules: string;          // Freeform owner rules (e.g. "dinner means 6pm PT")
 }
 
 // ── Agent ──────────────────────────────────────────────────────────────────────
