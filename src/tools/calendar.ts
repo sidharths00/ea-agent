@@ -148,6 +148,48 @@ export interface BookingResult {
   meetLink?: string;
 }
 
+export interface CalendarEvent {
+  eventId: string;
+  title: string;
+  start: string;
+  end: string;
+  attendees: string[];
+}
+
+export async function toolListEvents(
+  startDate: string,
+  endDate: string
+): Promise<{ events: CalendarEvent[] }> {
+  const calendar = google.calendar({ version: "v3", auth: getAuthClient() });
+  const res = await calendar.events.list({
+    calendarId: process.env.GOOGLE_CALENDAR_ID ?? "primary",
+    timeMin: new Date(`${startDate}T00:00:00`).toISOString(),
+    timeMax: new Date(`${endDate}T23:59:59`).toISOString(),
+    singleEvents: true,
+    orderBy: "startTime",
+  });
+  const events: CalendarEvent[] = (res.data.items ?? [])
+    .filter((e) => e.status !== "cancelled" && e.start?.dateTime)
+    .map((e) => ({
+      eventId: e.id!,
+      title: e.summary ?? "(no title)",
+      start: e.start!.dateTime!,
+      end: e.end!.dateTime!,
+      attendees: (e.attendees ?? []).map((a) => a.email ?? "").filter(Boolean),
+    }));
+  return { events };
+}
+
+export async function toolCancelCalendarEvent(eventId: string): Promise<{ success: boolean }> {
+  const calendar = google.calendar({ version: "v3", auth: getAuthClient() });
+  await calendar.events.delete({
+    calendarId: process.env.GOOGLE_CALENDAR_ID ?? "primary",
+    eventId,
+    sendUpdates: "all",
+  });
+  return { success: true };
+}
+
 export async function toolUpdateCalendarEvent(
   eventId: string,
   params: { start: string; end: string; title?: string; description?: string }

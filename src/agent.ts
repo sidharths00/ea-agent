@@ -6,8 +6,8 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages.js";
 import { AgentMailClient } from "agentmail";
 import { toolGetPreferences, toolSetPreference } from "./tools/preferences.js";
-import { toolGetThread, toolUpdateThreadState, toolFindBookedByAttendee } from "./tools/threads.js";
-import { toolGetAvailability, toolCreateCalendarEvent, toolUpdateCalendarEvent, type BookingResult } from "./tools/calendar.js";
+import { toolGetThread, toolUpdateThreadState } from "./tools/threads.js";
+import { toolGetAvailability, toolCreateCalendarEvent, toolUpdateCalendarEvent, toolListEvents, toolCancelCalendarEvent, type BookingResult } from "./tools/calendar.js";
 import { toolSendEmail } from "./tools/email.js";
 import type { AgentContext } from "./types.js";
 
@@ -118,7 +118,7 @@ const TOOLS: Tool[] = [
   {
     name: "book_meeting",
     description:
-      "Create a Google Calendar event and send a booking confirmation email. Call this once the requester has confirmed a specific time slot.",
+      "Create or update a Google Calendar event and send a booking confirmation email. Call this once the requester has confirmed a specific time slot. When rescheduling, pass existingEventId (obtained from list_events) to update the existing event in place rather than creating a duplicate.",
     input_schema: {
       type: "object",
       properties: {
@@ -143,8 +143,37 @@ const TOOLS: Tool[] = [
           type: "string",
           description: "Optional agenda or meeting notes to include in the invite.",
         },
+        existingEventId: {
+          type: "string",
+          description: "Google Calendar event ID of the meeting to reschedule. Obtain this by calling list_events first. When provided, the existing event is updated instead of a new one being created.",
+        },
       },
       required: ["title", "start", "end", "attendeeEmail"],
+    },
+  },
+  {
+    name: "list_events",
+    description:
+      "List Google Calendar events within a date range. Use this to identify which specific event to reschedule or cancel — always call this first before book_meeting (when rescheduling) or cancel_meeting, so you have the correct event ID.",
+    input_schema: {
+      type: "object",
+      properties: {
+        startDate: { type: "string", description: "Start of range, YYYY-MM-DD." },
+        endDate: { type: "string", description: "End of range (inclusive), YYYY-MM-DD." },
+      },
+      required: ["startDate", "endDate"],
+    },
+  },
+  {
+    name: "cancel_meeting",
+    description:
+      "Cancel a Google Calendar event and notify all attendees. Always call list_events first to get the correct event ID — never guess it.",
+    input_schema: {
+      type: "object",
+      properties: {
+        eventId: { type: "string", description: "Google Calendar event ID to cancel. Obtain from list_events." },
+      },
+      required: ["eventId"],
     },
   },
 ];
@@ -228,12 +257,12 @@ async function executeTool(
       const prefs = toolGetPreferences();
       const addMeet = prefs.preferredPlatform === "Google Meet";
 
-      // If rescheduling, update the existing event instead of delete+recreate.
-      // Fall back to searching by attendee email in case AgentMail split the thread.
+      // Prefer the event ID Claude explicitly found via list_events, then fall back
+      // to whatever is stored on this thread in SQLite.
       const existingThread = toolGetThread(ctx.email.threadId);
       const existingEventId =
-        existingThread?.calendarEventId ??
-        toolFindBookedByAttendee(toolInput.attendeeEmail as string)?.calendarEventId;
+        (toolInput.existingEventId as string | undefined) ??
+        existingThread?.calendarEventId;
 
       let booking: BookingResult;
       if (existingEventId) {
@@ -281,6 +310,15 @@ async function executeTool(
       return booking;
     }
 
+    case "list_events":
+      return toolListEvents(
+        toolInput.startDate as string,
+        toolInput.endDate as string
+      );
+
+    case "cancel_meeting":
+      return toolCancelCalendarEvent(toolInput.eventId as string);
+
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }
@@ -322,6 +360,8 @@ IMPORTANT RULES:
 - Only call book_meeting when the requester has explicitly confirmed a specific time.
 - If the thread is already in state "booked", send a polite note that the meeting is already scheduled.
 - If the owner emails asking about their own availability, reply with a clear summary of their free slots for the requested period.
+- When rescheduling: call list_events over the date range of the old meeting to find the correct event ID, then pass it as existingEventId to book_meeting. Never guess an event ID.
+- When cancelling a meeting: call list_events to identify the correct event by date and attendee, then call cancel_meeting with that event ID. Confirm the cancellation via send_email.
 - If the owner says "remember X" or "always do Y", call set_preference with key="customRules" to persist it. Read existing customRules first and write back all prior rules plus the new one (one rule per line). Then apply the rule immediately in this same response.
 - Always read customRules from get_preferences at the start and follow any rules stored there.`;
 }
