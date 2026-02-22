@@ -6,7 +6,7 @@ import type {
 } from "@anthropic-ai/sdk/resources/messages.js";
 import { AgentMailClient } from "agentmail";
 import { toolGetPreferences, toolSetPreference } from "./tools/preferences.js";
-import { toolGetThread, toolUpdateThreadState } from "./tools/threads.js";
+import { toolGetThread, toolUpdateThreadState, toolFindBookedByAttendee } from "./tools/threads.js";
 import { toolGetAvailability, toolCreateCalendarEvent, toolUpdateCalendarEvent, type BookingResult } from "./tools/calendar.js";
 import { toolSendEmail } from "./tools/email.js";
 import type { AgentContext } from "./types.js";
@@ -228,9 +228,12 @@ async function executeTool(
       const prefs = toolGetPreferences();
       const addMeet = prefs.preferredPlatform === "Google Meet";
 
-      // If rescheduling, update the existing event instead of delete+recreate
+      // If rescheduling, update the existing event instead of delete+recreate.
+      // Fall back to searching by attendee email in case AgentMail split the thread.
       const existingThread = toolGetThread(ctx.email.threadId);
-      const existingEventId = existingThread?.calendarEventId;
+      const existingEventId =
+        existingThread?.calendarEventId ??
+        toolFindBookedByAttendee(toolInput.attendeeEmail as string)?.calendarEventId;
 
       let booking: BookingResult;
       if (existingEventId) {
@@ -267,11 +270,12 @@ async function executeTool(
         });
       }
 
-      // Mark thread as booked and store the new event ID
+      // Mark thread as booked and store the event ID + attendee for future reschedule lookups
       toolUpdateThreadState({
         threadId: ctx.email.threadId,
         state: "booked",
         calendarEventId: booking.eventId,
+        attendeeEmail: toolInput.attendeeEmail as string,
       });
 
       return booking;

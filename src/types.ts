@@ -33,6 +33,7 @@ export interface Thread {
   proposedSlots: TimeSlot[] | null;
   requesterEmail: string;
   requesterName: string | null;
+  attendeeEmail: string | null;
   meetingTitle: string | null;
   meetingDurationMinutes: number | null;
   calendarEventId: string | null;

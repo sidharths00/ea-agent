@@ -44,6 +44,8 @@ function migrate(db: Database.Database): void {
   `);
   // Add calendar_event_id column to existing DBs that predate this field
   try { db.exec("ALTER TABLE threads ADD COLUMN calendar_event_id TEXT"); } catch {}
+  // Add attendee_email column to existing DBs that predate this field
+  try { db.exec("ALTER TABLE threads ADD COLUMN attendee_email TEXT"); } catch {}
   seedDefaultPreferences(db);
 }
 
@@ -107,6 +109,7 @@ interface ThreadRow {
   proposed_slots: string | null;
   requester_email: string;
   requester_name: string | null;
+  attendee_email: string | null;
   meeting_title: string | null;
   meeting_duration_minutes: number | null;
   calendar_event_id: string | null;
@@ -122,6 +125,7 @@ function rowToThread(row: ThreadRow): Thread {
     proposedSlots: row.proposed_slots ? JSON.parse(row.proposed_slots) : null,
     requesterEmail: row.requester_email,
     requesterName: row.requester_name,
+    attendeeEmail: row.attendee_email,
     meetingTitle: row.meeting_title,
     meetingDurationMinutes: row.meeting_duration_minutes,
     calendarEventId: row.calendar_event_id,
@@ -142,6 +146,7 @@ export function upsertThread(params: {
   state: ThreadState;
   requesterEmail?: string;
   requesterName?: string | null;
+  attendeeEmail?: string | null;
   meetingTitle?: string | null;
   meetingDurationMinutes?: number | null;
   proposedSlots?: TimeSlot[] | null;
@@ -150,12 +155,13 @@ export function upsertThread(params: {
   const db = getDb();
   db.prepare(`
     INSERT INTO threads (
-      thread_id, state, requester_email, requester_name,
+      thread_id, state, requester_email, requester_name, attendee_email,
       meeting_title, meeting_duration_minutes, proposed_slots, calendar_event_id, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     ON CONFLICT(thread_id) DO UPDATE SET
       state                    = excluded.state,
       requester_name           = COALESCE(excluded.requester_name, requester_name),
+      attendee_email           = COALESCE(excluded.attendee_email, attendee_email),
       meeting_title            = COALESCE(excluded.meeting_title, meeting_title),
       meeting_duration_minutes = COALESCE(excluded.meeting_duration_minutes, meeting_duration_minutes),
       proposed_slots           = excluded.proposed_slots,
@@ -166,6 +172,7 @@ export function upsertThread(params: {
     params.state,
     params.requesterEmail ?? "",
     params.requesterName ?? null,
+    params.attendeeEmail ?? null,
     params.meetingTitle ?? null,
     params.meetingDurationMinutes ?? null,
     params.proposedSlots ? JSON.stringify(params.proposedSlots) : null,
@@ -173,4 +180,15 @@ export function upsertThread(params: {
   );
 
   return getThread(params.threadId)!;
+}
+
+export function findBookedByAttendee(attendeeEmail: string): Thread | null {
+  const row = getDb()
+    .prepare(`
+      SELECT * FROM threads
+      WHERE attendee_email = ? AND state = 'booked' AND calendar_event_id IS NOT NULL
+      ORDER BY updated_at DESC LIMIT 1
+    `)
+    .get(attendeeEmail) as ThreadRow | undefined;
+  return row ? rowToThread(row) : null;
 }
