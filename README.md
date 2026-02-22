@@ -112,7 +112,7 @@ In `.env`:
 OWNER_NAME=Your Name
 OWNER_TIMEZONE=America/New_York   # IANA timezone
 AGENT_EMAIL=ea@agentmail.to       # The inbox you created above
-WEBHOOK_SECRET=some-random-string # Optional but recommended
+WEBHOOK_SECRET=some-random-secret # Optional but recommended
 ```
 
 ### 7. Seed scheduling preferences
@@ -121,35 +121,34 @@ WEBHOOK_SECRET=some-random-string # Optional but recommended
 npm run seed:prefs
 ```
 
-This runs an interactive CLI to set your working hours, meeting duration, buffer times, video platform preference, and no-meeting days. You can update individual preferences at any time by running it again or via the agent itself ("set my default meeting duration to 45 minutes").
+This runs an interactive CLI to set your working hours, meeting duration, buffer times, video platform preference, and no-meeting days. You can update individual preferences at any time by running it again or by emailing the agent directly ("set my default meeting duration to 45 minutes").
 
-### 8. Start the server
+### 8. Deploy to Railway
 
-```bash
-npm run dev
-```
-
-The server runs on port 3000 by default.
-
-### 9. Expose it with ngrok (local dev)
-
-AgentMail needs a public URL to send webhooks to:
+Railway is the recommended way to run EA Agent — it gives you a stable HTTPS URL, persistent uptime, and no need for ngrok or a local server.
 
 ```bash
-ngrok http 3000
+npm install -g @railway/cli
+railway login
+railway init
+railway up
 ```
 
-Copy the `https://...ngrok-free.app` URL.
+Then in the [Railway dashboard](https://railway.app):
+1. Go to your project → **Variables** and add all the env vars from your `.env` file
+2. Copy your service's public URL (e.g. `https://ea-agent-production.up.railway.app`)
 
-### 10. Register the webhook with AgentMail
+### 9. Register the webhook with AgentMail
 
 In the [AgentMail dashboard](https://agentmail.to), set your inbox's webhook URL to:
 
 ```
-https://your-ngrok-url.ngrok-free.app/webhook/email
+https://your-railway-url.up.railway.app/webhook/email
 ```
 
 If you set `WEBHOOK_SECRET` in `.env`, configure the same secret in AgentMail's webhook settings.
+
+That's it — the agent is live. No `npm run dev`, no ngrok.
 
 ---
 
@@ -170,11 +169,17 @@ The agent will:
 4. Wait for confirmation
 5. Book the calendar event and send a confirmation to all parties
 
-You can also email the agent directly to ask about your availability:
+You can also email the agent directly to ask about your availability or update its behavior:
 
 ```
 To: ea@agentmail.to
 Subject: What's my schedule look like next week?
+```
+
+```
+To: ea@agentmail.to
+Subject: Preferences
+Body: Remember that "dinner" means 6pm PT.
 ```
 
 ---
@@ -183,7 +188,7 @@ Subject: What's my schedule look like next week?
 
 All scheduling behavior is controlled by preferences stored in SQLite. You can change them by:
 
-- Running `npm run seed:prefs` again
+- Running `npm run seed:prefs`
 - Emailing the agent directly: *"Set my working hours to 8am–5pm"*
 
 Available preferences:
@@ -199,6 +204,7 @@ Available preferences:
 | `preferredPlatform` | Video platform (`Google Meet`, `Zoom`, etc.) | `Google Meet` |
 | `maxMeetingsPerDay` | Max meetings allowed per day | `6` |
 | `noMeetingDays` | Days to block (JSON array, 0=Sun, 6=Sat) | `[0, 6]` |
+| `customRules` | Freeform instructions the agent always follows | `""` |
 
 ---
 
@@ -233,22 +239,13 @@ scripts/
 
 ---
 
-## Deployment
+## Other deployment options
 
-For production, deploy the Express server anywhere that supports Node.js and set environment variables appropriately. Some options:
+Railway is recommended, but any Node.js host works. Avoid free tiers that sleep on inactivity (e.g. Render free) — a sleeping server will miss webhooks.
 
-**Railway**
-```bash
-railway init
-railway up
-```
-Set all env vars in the Railway dashboard. Use the provided Railway URL as your AgentMail webhook URL.
-
-**Render**
-- Create a new Web Service pointing to your repo
-- Set build command: `npm run build`
-- Set start command: `npm start`
-- Add all env vars in the Render dashboard
+**Render** (paid tier)
+- Create a new Web Service → build: `npm run build`, start: `npm start`
+- Add env vars in the Render dashboard
 
 **Fly.io**
 ```bash
@@ -257,7 +254,18 @@ fly secrets set ANTHROPIC_API_KEY=... AGENTMAIL_API_KEY=... # etc.
 fly deploy
 ```
 
-No need for ngrok in production — use your deployed service URL as the webhook endpoint.
+---
+
+## Local development
+
+If you want to run locally for testing:
+
+```bash
+npm run dev        # starts server on port 3000
+ngrok http 3000    # exposes it publicly
+```
+
+Use the ngrok URL as your temporary AgentMail webhook URL.
 
 ---
 
